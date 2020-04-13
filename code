@@ -101,9 +101,9 @@ def get_user_ids(address, password):
         pass
     driver.close()
 
-    follow_ids = re.findall('class=".*?" data-user_id="(.*?)" data-profile_img=".*?" data-user_name=".*?">', source)
-    follow_ids = set(follow_ids)
-    return follow_ids
+    user_ids = re.findall('class=".*?" data-user_id="(.*?)" data-profile_img=".*?" data-user_name=".*?">', source)
+    user_ids = set(user_ids)
+    return user_ids
 
 
 if __name__ == '__main__':
