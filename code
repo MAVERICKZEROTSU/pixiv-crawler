@@ -78,7 +78,7 @@ def download_pictures(pictures_urls, headers, root, user_name):
         print("保存失败")
 
 
-# selenium登录
+# selenium登录获得关注画师的id
 def get_user_ids(address, password):
     url = 'https://www.pixiv.net'
 
