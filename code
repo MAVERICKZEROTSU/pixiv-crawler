@@ -1,0 +1,136 @@
+import requests
+import re
+import os
+from selenium import webdriver
+import time
+
+
+def get_original_json_text(url, headers):
+    try:
+
+        r = requests.get(url, headers=headers)
+        r.raise_for_status()
+        r.encoding = r.apparent_encoding
+        return r.json()
+    except:
+        print("爬取失败")
+        return ""
+
+
+# 从json文件中获取作品编号
+def get_illusts(dict):
+    body = dict['body']
+    author_illusts = body['illusts']
+    illusts = [key for key, value in author_illusts.items()]
+    return illusts
+
+
+# 根据作品编号构造作品的url，然后匹配图片的url
+def get_pictures_urls(illusts, headers, user_id):
+    img_urls = []
+    count = 0
+    print('\n正在加载数据: ' + user_id)
+    for illust in illusts:
+        img_url = 'https://www.pixiv.net/artworks/' + illust
+        html = requests.get(img_url, headers).text
+        img_url = re.findall('{"mini":".*?","thumb":".*?","small":".*?","regular":"(.*?)","original":".*?"}', html)
+        img_urls.append(img_url[-1])
+        count += 1
+        print('\r加载进度: {:.2f}%'.format(count * 100 / len(illusts)), end='')
+    return img_urls
+
+# 获取用户名字
+def get_user_name(user_id, headers):
+    name_url = 'https://www.pixiv.net/users/' + user_id
+    r = requests.get(name_url, headers)
+    html = r.text
+    user_name = re.findall('<title>(.*?) - pixiv</title>', html)
+    return user_name[-1]
+
+
+# 保存图片
+def download_pictures(pictures_urls, headers, root, user_name):
+    count = 0
+    print('\n即将开始下载: ' + user_name)
+    try:
+        right_user_name = re.sub('[\/:*?"<>|]', '', user_name)  # 防止个别用户名字中出现非法字符
+        dir_path = root + '/' + right_user_name
+
+        if not os.path.exists(root):
+            os.mkdir(root)
+
+
+        if not os.path.exists(dir_path):
+            os.mkdir(dir_path)
+        for pictures_url in pictures_urls:
+            file_name = pictures_url.split('/')[-1]
+            picture_path = dir_path + '/' + file_name
+            if not os.path.exists(picture_path):
+                r = requests.get(pictures_url, headers=headers)
+                with open(picture_path, 'wb') as f:
+                    f.write(r.content)
+                    count += 1
+                    print('\r下载进度: {:.2f}%'.format(count * 100 / len(pictures_urls)), end='')
+            else:
+                print("图片已存在")
+
+    except:
+        print("保存失败")
+
+
+# selenium登录
+def get_user_ids(address, password):
+    url = 'https://www.pixiv.net'
+
+    driver = webdriver.Chrome('C:\chromedriver_win32\chromedriver.exe')
+    driver.get(url)
+    driver.find_element_by_xpath('//*[@id="wrapper"]/div[3]/div[2]/a[2]').click()
+    driver.find_element_by_xpath('//*[@id="LoginComponent"]/form/div[1]/div[1]/input').send_keys(address)
+    driver.find_element_by_xpath('//*[@id="LoginComponent"]/form/div[1]/div[2]/input').send_keys(password)
+    driver.find_element_by_xpath('//*[@id="LoginComponent"]/form/button').click()
+    time.sleep(5)
+    driver.find_element_by_xpath('//*[@id="page-mypage"]/div[1]/div/ul[2]/li[1]/a').click()
+    time.sleep(3)
+    source = driver.page_source
+    try:
+        for i in range(5):
+            driver.find_element_by_xpath('//*[@id="search-result"]/div[2]/ol/li[4]/a').click()
+            time.sleep(3)
+            source += driver.page_source
+    except:
+        pass
+    driver.close()
+
+    follow_ids = re.findall('class=".*?" data-user_id="(.*?)" data-profile_img=".*?" data-user_name=".*?">', source)
+    follow_ids = set(follow_ids)
+    return follow_ids
+
+
+if __name__ == '__main__':
+    headers = {
+        'authority': 'pixon.ads-pixiv.net',
+        'upgrade-insecure-requests': '1',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36',
+        'sec-fetch-dest': 'iframe',
+        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+        'sec-fetch-site': 'cross-site',
+        'sec-fetch-mode': 'navigate',
+        'referer': 'https://www.pixiv.net/',
+        'accept-language': 'zh-CN,zh;q=0.9,ja;q=0.8',
+    }
+    root = "D:\pixiv_users_pictures"
+    address = input('Enter your mail address: ') # 输入邮箱 
+    password = input('Enter your password: ')   # 输入密码
+
+    user_ids = get_user_ids(address, password)
+
+    for user_id in user_ids:
+        picture_url = 'https://www.pixiv.net/ajax/user/' + user_id + '/profile/all?lang=ja'
+
+        dict = get_original_json_text(picture_url, headers)
+        user_name = get_user_name(user_id, headers)
+        illusts = get_illusts(dict)
+        pictures_urls = get_pictures_urls(illusts, headers, user_id)
+        download_pictures(pictures_urls, headers, root, user_name)
+
+
